@@ -38,7 +38,7 @@ PYTEST_FLAGS = ['--doctest-modules']
 # metadata has no dependencies, otherwise they will need to be added to
 # the setup_requires keyword.
 metadata = imp.load_source(
-    'metadata', os.path.join(CODE_DIRECTORY, 'metadata.py'))
+    '__metadata__', os.path.join(CODE_DIRECTORY, '__metadata__.py'))
 
 
 # Miscellaneous helper functions

@@ -1,6 +1,6 @@
 """Novel lossless progressive image compression algorithm"""
 
-from plic import metadata
+from plic import __metadata__ as metadata
 
 
 __version__ = metadata.version

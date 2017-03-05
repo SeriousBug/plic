@@ -4,10 +4,6 @@ from math import ceil
 import numpy as np
 from scipy import misc
 
-import pickle
-import pickletools
-import zlib
-
 
 def downsample(image, t):
     """Downsample an image by skipping `t` pixels."""
@@ -66,14 +62,13 @@ def error_deprocess(error, shape, t):
 
 
 def compress(image, t=3):
-    image = image
     downsampled = downsample(image, t=t)
     rescaled = interpolate(downsampled, image.shape)
     error = error_process(image.astype(np.int16) - rescaled, t=t)
-    return zlib.compress(pickletools.optimize(pickle.dumps((downsampled, error))))
+    return (downsampled, error, image.shape, t)
 
 
-def decompress(dump, shape, t=3):
-    downsampled, error = pickle.loads(zlib.decompress(dump))
+def decompress(compressed):
+    downsampled, error, shape, t = compressed
     rescaled = interpolate(downsampled, shape)
     return rescaled + error_deprocess(error, shape, t)

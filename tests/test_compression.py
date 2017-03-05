@@ -25,4 +25,4 @@ class TestCompression:
     @mark.parametrize('image', test_images)
     def test_compression_roundtrip(self, image):
         """Compressing then decompressing an image should give back the same image."""
-        assert (compression.decompress(compression.compress(image), image.shape) == image).all()
+        assert (compression.decompress(compression.compress(image)) == image).all()

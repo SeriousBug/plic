@@ -6,8 +6,11 @@ from __future__ import print_function
 import argparse
 import sys
 from os.path import basename
+import pickle
+import zlib
 
-from plic import metadata
+from scipy import misc
+from plic import __metadata__ as metadata, colorspace, compression
 
 
 def main(argv):
@@ -49,7 +52,20 @@ def main(argv):
                         help="The input file to be processed. If both compress and decompress options "
                         "are omitted, the operation will be automatically decided based on the extension of "
                         "input file.")
-    parser.parse_args(argv[1:])
+    args = parser.parse_args(argv[1:])
+    if args.compress:
+        image = misc.imread(args.input)
+        transformed = colorspace.rgb2rdgdb(image)
+        compressed = compression.compress(transformed)
+        encoded = zlib.compress(pickle.dumps(compressed))
+        with open(args.output, 'wb') as f:
+            f.write(encoded)
+    elif args.decompress:
+        with open(args.input, 'rb') as f:
+            decoded = pickle.loads(zlib.decompress(f.read()))
+        decompressed = compression.decompress(decoded)
+        detransformed = colorspace.rdgdb2rgb(decompressed)
+        misc.imsave(args.output, detransformed)
     raise SystemExit(0)
 
 
