@@ -3,6 +3,7 @@
 from math import ceil
 import numpy as np
 from scipy import misc
+from plic import encoding
 
 
 def downsample(image, t):
@@ -61,14 +62,47 @@ def error_deprocess(error, shape, t):
     return error
 
 
+def _encode_errors(e0, e1, e2):
+    code = encoding.build_dictionary(e0, e1, e2)
+    return (code,
+            len(e0),
+            encoding.encode(e0, code),
+            encoding.encode(e1, code),
+            encoding.encode(e2, code))
+
+
+def _decode_errors(error_encoded):
+    code, err_len, e0_enc, e1_enc, e2_enc = error_encoded
+    return (encoding.decode(e0_enc, code)[:err_len],
+            encoding.decode(e1_enc, code)[:err_len],
+            encoding.decode(e2_enc, code)[:err_len])
+
+
+def _encode_image(image):
+    data = image.ravel()
+    code = encoding.build_dictionary(data)
+    return (code, image.shape, encoding.encode(data, code))
+
+
+def _decode_image(encoded_data):
+    code, shape, data = encoded_data
+    m, n, c = shape
+    image = encoding.decode(data, code)[:m * n * c].reshape(shape)
+    return image
+
+
 def compress(image, t=3):
     downsampled = downsample(image, t=t)
     rescaled = interpolate(downsampled, image.shape)
     error = error_process(image.astype(np.int16) - rescaled, t=t)
-    return (downsampled, error, image.shape, t)
+    error_encoded = _encode_errors(*error)
+    downsampled_encoded = _encode_image(downsampled)
+    return (downsampled_encoded, error_encoded, image.shape, t)
 
 
 def decompress(compressed):
-    downsampled, error, shape, t = compressed
+    downsampled_encoded, error_encoded, shape, t = compressed
+    downsampled = _decode_image(downsampled_encoded)
+    error = _decode_errors(error_encoded)
     rescaled = interpolate(downsampled, shape)
     return rescaled + error_deprocess(error, shape, t)
