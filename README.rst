@@ -1,5 +1,5 @@
 =======================================
- Progressive Lossles Image Compression
+Lossles Image Compression
 =======================================
 
-A novel progressive lossless image compression algorithm.
+A lossless image compression algorithm.
