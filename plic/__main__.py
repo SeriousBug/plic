@@ -4,6 +4,7 @@
 import argparse
 import sys
 from os.path import basename
+import logging
 import pickle
 import zlib
 
@@ -33,6 +34,11 @@ def _make_parser(prog_name):
         version='{0} {1}'.format(metadata.project, metadata.version),
     )
     parser.add_argument(
+        '--verbose',
+        action='store_true',
+        default=False,
+    )
+    parser.add_argument(
         "-o", "--output",
         type=argparse.FileType('wb'),
         help="The name of the output file.",
@@ -56,6 +62,26 @@ def _make_parser(prog_name):
     return parser
 
 
+def _setup_logger(level):
+    """Sets up the root logger.
+
+    DEBUG and INFO level messages will be logged to stdout. WARNING,
+    ERROR and CRITICAL level messages will be logged to stderr.
+    """
+    logger = logging.getLogger()
+    logger.setLevel(level)
+    form = logging.Formatter("%(asctime)s %(levelname)s %(name)s.%(funcName)s:%(lineno)s - %(message)s")
+    msg_handler = logging.StreamHandler(stream=sys.stdout)
+    msg_handler.setLevel(logging.DEBUG)
+    msg_handler.setFormatter(form)
+    msg_handler.addFilter(lambda r: r.levelno < logging.WARNING)
+    err_handler = logging.StreamHandler(stream=sys.stderr)
+    err_handler.setLevel(logging.WARNING)
+    err_handler.setFormatter(form)
+    logger.addHandler(msg_handler)
+    logger.addHandler(err_handler)
+
+
 def main(argv):
     """Program entry point.
 
@@ -66,6 +92,7 @@ def main(argv):
     """
     parser = _make_parser(prog_name=basename(argv[0]))
     args = parser.parse_args(argv[1:])
+    _setup_logger(logging.INFO if args.verbose else logging.WARNING)
     if args.compress:
         image = misc.imread(args.input)
         transformed = colorspace.rgb2rdgdb(image)

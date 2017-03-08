@@ -1,9 +1,13 @@
 """The compression algorithm."""
 
 from math import ceil
+import logging
 import numpy as np
 from scipy import misc
 from plic import encoding
+
+
+_LOG = logging.getLogger(__name__)
 
 
 def downsample(image, t):
@@ -64,11 +68,17 @@ def error_deprocess(error, shape, t):
 
 def _encode_errors(e0, e1, e2):
     code = encoding.build_dictionary(e0, e1, e2)
-    return (code,
-            len(e0),
-            encoding.encode(e0, code),
-            encoding.encode(e1, code),
-            encoding.encode(e2, code))
+    e0_enc = encoding.encode(e0, code)
+    e1_enc = encoding.encode(e1, code)
+    e2_enc = encoding.encode(e2, code)
+    _LOG.info(
+        "Encoded %s numbers in %s bytes to %s bytes, %s bytes per number on average.",
+        len(e0) * 3,
+        e0.nbytes * 3,
+        len(e0_enc) * 3,
+        len(e0_enc) / len(e0),
+    )
+    return (code, len(e0), e0_enc, e1_enc, e2_enc)
 
 
 def _decode_errors(error_encoded):
