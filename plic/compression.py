@@ -109,13 +109,11 @@ def compress(image, t=3):
     rescaled = interpolate(downsampled, image.shape, t)
     error = error_process(image.astype(np.int16) - rescaled, t=t)
     error_encoded = _encode_errors(*error)
-    downsampled_encoded = _encode_image(downsampled)
-    return (downsampled_encoded, error_encoded, image.shape, t)
+    return (downsampled, error_encoded, image.shape, t)
 
 
 def decompress(compressed):
-    downsampled_encoded, error_encoded, shape, t = compressed
-    downsampled = _decode_image(downsampled_encoded)
+    downsampled, error_encoded, shape, t = compressed
     error = _decode_errors(error_encoded)
     rescaled = interpolate(downsampled, shape, t)
     return rescaled + error_deprocess(error, shape, t)
