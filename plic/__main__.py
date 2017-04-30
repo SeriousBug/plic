@@ -43,6 +43,12 @@ def _make_parser(prog_name):
         type=argparse.FileType('wb'),
         help="The name of the output file.",
     )
+    parser.add_argument(
+        "-t", "--interpratio",
+        type=int,
+        default=3,
+        help="Interpolation ratio.",
+    )
     operation_mode = parser.add_mutually_exclusive_group(required=False)
     operation_mode.add_argument(
         "-c", "--compress", action='store_true',
@@ -96,7 +102,7 @@ def main(argv):
     if args.compress:
         image = misc.imread(args.input)
         transformed = colorspace.rgb2rdgdb(image)
-        compressed = compression.compress(transformed)
+        compressed = compression.compress(transformed, t=args.interpratio)
         encoded = zlib.compress(pickle.dumps(compressed))
         args.output.write(encoded)
     elif args.decompress:

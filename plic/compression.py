@@ -15,10 +15,13 @@ def downsample(image, t):
     return np.copy(image[::t,::t,:])
 
 
-def interpolate(image, shape):
+def interpolate(image, shape, t):
     """Up-size an image by a factor of `t`."""
     assert type(shape) is tuple, "Interpolation must be done to a shape"
-    return misc.imresize(image, shape, interp='nearest')
+    resized = misc.imresize(image, shape, interp='cubic')
+    # Insert the pixels that are certain to be correct
+    resized[::t,::t,:] = image
+    return resized
 
 
 def _error_mask(shape, t):
@@ -103,7 +106,7 @@ def _decode_image(encoded_data):
 
 def compress(image, t=3):
     downsampled = downsample(image, t=t)
-    rescaled = interpolate(downsampled, image.shape)
+    rescaled = interpolate(downsampled, image.shape, t)
     error = error_process(image.astype(np.int16) - rescaled, t=t)
     error_encoded = _encode_errors(*error)
     downsampled_encoded = _encode_image(downsampled)
@@ -114,5 +117,5 @@ def decompress(compressed):
     downsampled_encoded, error_encoded, shape, t = compressed
     downsampled = _decode_image(downsampled_encoded)
     error = _decode_errors(error_encoded)
-    rescaled = interpolate(downsampled, shape)
+    rescaled = interpolate(downsampled, shape, t)
     return rescaled + error_deprocess(error, shape, t)
