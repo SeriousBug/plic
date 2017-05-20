@@ -102,12 +102,12 @@ def main(argv):
     if args.compress:
         image = misc.imread(args.input)
         transformed = colorspace.rgb2rdgdb(image)
-        compressed = compression.compress(transformed, t=args.interpratio)
+        compressed = compression.CompressedImage(transformed, ratio=args.interpratio)
         encoded = zlib.compress(pickle.dumps(compressed))
         args.output.write(encoded)
     elif args.decompress:
         decoded = pickle.loads(zlib.decompress(args.input.read()))
-        decompressed = compression.decompress(decoded)
+        decompressed = decoded.reconstruct()
         detransformed = colorspace.rdgdb2rgb(decompressed)
         misc.imsave(args.output, detransformed)
     raise SystemExit(0)

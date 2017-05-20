@@ -1,123 +1,117 @@
 """The compression algorithm."""
 
-from math import ceil
+from math import ceil, floor, log2
 import logging
 import numpy as np
 from scipy import misc
 from plic import encoding
 
-
 _LOG = logging.getLogger(__name__)
 
 
-def downsample(image, t):
-    """Downsample an image by skipping `t` pixels."""
-    return np.copy(image[::t,::t,:])
+class EncodedError:
+    @staticmethod
+    def _error_mask(shape, t):
+        """"Find a mask that will give the pixels that have error when interpolating up to `shape` by order `t`."""
+        m, n, c = shape
+        assert c == 3, "The image must have 3 color channels"
+        mask = np.ones(m * n, dtype=bool)
+        nrow = ceil(n / t)
+        ncol = ceil(m / t)
+        for i in range(0, nrow * ncol):
+            # nrow pixels to be deleted in any row, t pixels between each pixel to be deleted
+            irow = (i % nrow) * t
+            # t pixels in a row before we go to the next row, t rows to skip with n pixels each
+            icol = (i // nrow) * n * t
+            mask[irow + icol] = False
+            return mask
 
-
-def interpolate(image, shape, t):
-    """Up-size an image by a factor of `t`."""
-    assert type(shape) is tuple, "Interpolation must be done to a shape"
-    resized = misc.imresize(image, shape, interp='cubic')
-    # Insert the pixels that are certain to be correct
-    resized[::t,::t,:] = image
-    return resized
-
-
-def _error_mask(shape, t):
-    """"Find a mask that will give the pixels that have error when interpolating up to `shape` by order `t`."""
-    m, n, c = shape
-    assert c == 3, "The image must have 3 color channels"
-    mask = np.ones(m * n, dtype=bool)
-    nrow = ceil(n / t)
-    ncol = ceil(m / t)
-    for i in range(0, nrow * ncol):
-        # nrow pixels to be deleted in any row, t pixels between each pixel to be deleted
-        irow = (i % nrow) * t
-        # t pixels in a row before we go to the next row, t rows to skip with n pixels each
-        icol = (i // nrow) * n * t
-        mask[irow + icol] = False
-    return mask
-
-
-def error_process(error, t):
-    """Process the error matrix to retrieve the pixels from each channel that is expected to have error.
-
-    The error will be split into channels and flattened.
-    """
-    # Number of pixels to be deleted
-    mask = _error_mask(error.shape, t)
-    return (error[:,:,0].ravel()[mask],
+    def __init__(self, error, ratio):
+        self.shape = error.shape
+        self.ratio = ratio
+        mask = self._error_mask(self.shape, ratio)
+        channels = (
+            error[:,:,0].ravel()[mask],
             error[:,:,1].ravel()[mask],
-            error[:,:,2].ravel()[mask])
+            error[:,:,2].ravel()[mask],
+        )
+        self.code = encoding.build_dictionary(*channels)
+        self.encoded = []
+        for channel in channels:
+            self.encoded.append(encoding.encode(channel, self.code))
+        _LOG.info(
+            "Error encoding: encoded %s bytes to %s bytes",
+            sum(map(lambda c: c.nbytes, channels)),
+            sum(map(lambda e: len(e), self.encoded)),
+        )
+
+    def _deprocess_error_channel(self, err, mask):
+        m, n, _ = self.shape
+        channel = np.zeros(m * n)
+        channel[mask] = err
+        return channel.reshape((m, n))
+
+    def reconstruct(self):
+        m, n, _ = self.shape
+        mask = self._error_mask(self.shape, self.ratio)
+        error = np.empty(self.shape)
+        for i, channel in enumerate(self.encoded):
+            decoded = encoding.decode(channel, self.code)[:m * n - 1]
+            error[:,:,i] = self._deprocess_error_channel(decoded, mask)
+        return error
 
 
-def _deprocess_error_channel(err, mask, m, n):
-    channel = np.zeros(m * n)
-    channel[mask] = err
-    return channel.reshape((m, n))
+class EncodedImage:
+    def __init__(self, image):
+        data = image.ravel()
+        self.shape = image.shape
+        self.code = encoding.build_dictionary(data)
+        self.encoded = encoding.encode(data, self.code)
+        _LOG.info(
+            "Image encoding: encoded %s bytes to %s bytes",
+            data.nbytes,
+            len(self.encoded)
+        )
+
+    def reconstruct(self):
+        m, n, c = self.shape
+        image = encoding.decode(self.encoded, self.code)[:m * n * c].reshape(self.shape)
+        return image
 
 
-def error_deprocess(error, shape, t):
-    m, n, c = shape
-    e0, e1, e2 = error
-    mask = _error_mask(shape, t)
-    error = np.empty(shape)
-    error[:,:,0] = _deprocess_error_channel(e0, mask, m, n)
-    error[:,:,1] = _deprocess_error_channel(e1, mask, m, n)
-    error[:,:,2] = _deprocess_error_channel(e2, mask, m, n)
-    return error
+class CompressedImage:
+    @staticmethod
+    def downsample(image, t):
+        """Downsample an image by skipping `t` pixels."""
+        return np.copy(image[::t,::t,:])
 
+    @staticmethod
+    def interpolate(image, shape, t):
+        """Up-size an image by a factor of `t`."""
+        assert type(shape) is tuple, "Interpolation must be done to a shape"
+        resized = misc.imresize(image, shape, interp='cubic')
+        # Insert the pixels that are certain to be correct
+        resized[::t,::t,:] = image
+        return resized
 
-def _encode_errors(e0, e1, e2):
-    code = encoding.build_dictionary(e0, e1, e2)
-    e0_enc = encoding.encode(e0, code)
-    e1_enc = encoding.encode(e1, code)
-    e2_enc = encoding.encode(e2, code)
-    _LOG.info(
-        "Error encoding: encoded %s bytes to %s bytes",
-        e0.nbytes + e1.nbytes + e2.nbytes,
-        len(e0_enc) + len(e1_enc) + len(e2_enc),
-    )
-    return (code, len(e0), e0_enc, e1_enc, e2_enc)
+    def __init__(self, image, times=0, ratio=2):
+        if times == 0:
+            m, n, _ = image.shape
+            times = floor(min(log2(m / 256), log2(n / 256)))
+        self.times = times
+        self.ratio = ratio
+        self.shape = image.shape
+        downsampled = self.downsample(image, t=ratio)
+        rescaled = self.interpolate(downsampled, image.shape, ratio)
+        self.error = EncodedError(image.astype(np.int32) - rescaled, ratio)
+        # If we're not recursing anymore, store the actual downsampled image
+        if self.times <= 1:
+            self.downsampled = EncodedImage(downsampled)
+        else:
+            self.downsampled = CompressedImage(downsampled, times - 1, ratio)
 
-
-def _decode_errors(error_encoded):
-    code, err_len, e0_enc, e1_enc, e2_enc = error_encoded
-    return (encoding.decode(e0_enc, code)[:err_len],
-            encoding.decode(e1_enc, code)[:err_len],
-            encoding.decode(e2_enc, code)[:err_len])
-
-
-def _encode_image(image):
-    data = image.ravel()
-    code = encoding.build_dictionary(data)
-    encoded = encoding.encode(data, code)
-    _LOG.info(
-        "Image encoding: encoded %s bytes to %s bytes",
-        data.nbytes,
-        len(encoded)
-    )
-    return (code, image.shape, encoded)
-
-
-def _decode_image(encoded_data):
-    code, shape, data = encoded_data
-    m, n, c = shape
-    image = encoding.decode(data, code)[:m * n * c].reshape(shape)
-    return image
-
-
-def compress(image, t=3):
-    downsampled = downsample(image, t=t)
-    rescaled = interpolate(downsampled, image.shape, t)
-    error = error_process(image.astype(np.int16) - rescaled, t=t)
-    error_encoded = _encode_errors(*error)
-    return (downsampled, error_encoded, image.shape, t)
-
-
-def decompress(compressed):
-    downsampled, error_encoded, shape, t = compressed
-    error = _decode_errors(error_encoded)
-    rescaled = interpolate(downsampled, shape, t)
-    return rescaled + error_deprocess(error, shape, t)
+    def reconstruct(self):
+        downsampled = self.downsampled.reconstruct()
+        error = self.error.reconstruct()
+        rescaled = self.interpolate(downsampled, self.shape, self.ratio)
+        return rescaled + error
