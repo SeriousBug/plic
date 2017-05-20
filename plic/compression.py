@@ -75,11 +75,9 @@ def _encode_errors(e0, e1, e2):
     e1_enc = encoding.encode(e1, code)
     e2_enc = encoding.encode(e2, code)
     _LOG.info(
-        "Encoded %s numbers in %s bytes to %s bytes, %s bytes per number on average.",
-        len(e0) * 3,
-        e0.nbytes * 3,
-        len(e0_enc) * 3,
-        len(e0_enc) / len(e0),
+        "Error encoding: encoded %s bytes to %s bytes",
+        e0.nbytes + e1.nbytes + e2.nbytes,
+        len(e0_enc) + len(e1_enc) + len(e2_enc),
     )
     return (code, len(e0), e0_enc, e1_enc, e2_enc)
 
@@ -94,7 +92,13 @@ def _decode_errors(error_encoded):
 def _encode_image(image):
     data = image.ravel()
     code = encoding.build_dictionary(data)
-    return (code, image.shape, encoding.encode(data, code))
+    encoded = encoding.encode(data, code)
+    _LOG.info(
+        "Image encoding: encoded %s bytes to %s bytes",
+        data.nbytes,
+        len(encoded)
+    )
+    return (code, image.shape, encoded)
 
 
 def _decode_image(encoded_data):
