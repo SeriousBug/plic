@@ -4,6 +4,7 @@ import numpy as np
 
 
 def rgb2rdgdb(image):
+    """Converts an image from RGB to mRDgDb color space."""
     r = image[:,:,0]
     g = image[:,:,1]
     b = image[:,:,2]
@@ -18,6 +19,7 @@ def rgb2rdgdb(image):
 
 
 def rdgdb2rgb(image):
+    """Converts an image from mRDgDb to RGB color space."""
     r = image[:,:,0]
     dg = image[:,:,1]
     db = image[:,:,2]

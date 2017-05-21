@@ -27,6 +27,7 @@ class EncodedError:
             return mask
 
     def __init__(self, error, ratio):
+        """Encode an error matrix that was created after a `ratio` downsampling."""
         self.shape = error.shape
         self.ratio = ratio
         mask = self._error_mask(self.shape, ratio)
@@ -46,12 +47,14 @@ class EncodedError:
         )
 
     def _deprocess_error_channel(self, err, mask):
+        """Insert the deleted zeroes into the error channels."""
         m, n, _ = self.shape
         channel = np.zeros(m * n)
         channel[mask] = err
         return channel.reshape((m, n))
 
     def reconstruct(self):
+        """Convert the encoded error back to the error matrix."""
         m, n, _ = self.shape
         mask = self._error_mask(self.shape, self.ratio)
         error = np.empty(self.shape)
@@ -63,6 +66,7 @@ class EncodedError:
 
 class EncodedImage:
     def __init__(self, image):
+        """Encode an image with Huffman encoding."""
         data = image.ravel()
         self.shape = image.shape
         self.code = encoding.build_dictionary(data)
@@ -74,6 +78,7 @@ class EncodedImage:
         )
 
     def reconstruct(self):
+        """Convert the encoded image back to the original matrix form."""
         m, n, c = self.shape
         image = encoding.decode(self.encoded, self.code)[:m * n * c].reshape(self.shape)
         return image
@@ -87,7 +92,7 @@ class CompressedImage:
 
     @staticmethod
     def interpolate(image, shape, t):
-        """Up-size an image by a factor of `t`."""
+        """Up-size an image to size of `shape`."""
         assert type(shape) is tuple, "Interpolation must be done to a shape"
         resized = misc.imresize(image, shape, interp='cubic')
         # Insert the pixels that are certain to be correct
@@ -95,6 +100,17 @@ class CompressedImage:
         return resized
 
     def __init__(self, image, times=0, ratio=2):
+        """Compress an image.
+
+        The compression operation will be performed recursively. The
+        depth of the recursion is determined by `times` parameter. If
+        `times` is 0, the recursion depth is determined automatically.
+        With each recursion, the downsampled form of the image is
+        compressed again using the algorithm.
+
+        Ratio is the downsampling ratio. Higher values are better for
+        less detailed images.
+        """
         if times == 0:
             m, n, _ = image.shape
             times = floor(min(log2(m / 256), log2(n / 256)))
@@ -111,6 +127,7 @@ class CompressedImage:
             self.downsampled = CompressedImage(downsampled, times - 1, ratio)
 
     def reconstruct(self):
+        """Decompress the image."""
         downsampled = self.downsampled.reconstruct()
         error = self.error.reconstruct()
         rescaled = self.interpolate(downsampled, self.shape, self.ratio)

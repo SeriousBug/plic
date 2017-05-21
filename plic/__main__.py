@@ -46,7 +46,7 @@ def _make_parser(prog_name):
     parser.add_argument(
         "-t", "--interpratio",
         type=int,
-        default=3,
+        default=2,
         help="Interpolation ratio.",
     )
     operation_mode = parser.add_mutually_exclusive_group(required=False)
